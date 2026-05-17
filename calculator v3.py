@@ -1,3 +1,12 @@
+"""Scientific Calculator & Grapher.
+
+This Tkinter application provides a scientific calculator UI, safe
+expression evaluation for scalar calculations, and algebraic function
+plotting with optional new or shared Matplotlib windows.
+
+The calculator uses degree-based trigonometry throughout for consistency.
+"""
+
 import tkinter as tk
 from tkinter import simpledialog, messagebox
 import math
@@ -39,19 +48,27 @@ SafPlotGlob = {"__builtins__": {}}
 
 # Functions
 def click(value):
+    """Insert the pressed button value into the calculator input."""
     entry.insert(tk.END, value)
 
 def clear():
+    """Clear the calculator input field."""
     entry.delete(0, tk.END)
 
 def backspace():
+    """Remove the last character from the calculator input field."""
     current_text = entry.get()
     entry.delete(0, tk.END)
     entry.insert(0, current_text[:-1])
 
 def normalize_expression(expr):
+    """Normalize an expression before evaluation.
+
+    Converts '^' to '**' for exponentiation and inserts implicit
+    multiplication operators where needed.
+    """
     expr = expr.replace('^', '**')
-    # Inserts '*' between a number and the next variable/function/parenthesis.
+    # Insert '*' between a number and a following value or function.
     expr = re.sub(
         r'(\d)(?=\s*(?:x\b|pi\b|e\b|sin\b|cos\b|tan\b|asin\b|acos\b|atan\b|log\b|ln\b|sqrt\b|abs\b|\())',
         r'\1*',
@@ -65,13 +82,14 @@ def normalize_expression(expr):
     return expr
 
 def calculate():
+    """Evaluate the current expression from the calculator display."""
     try:
         expr = normalize_expression(entry.get())
-        # detect standalone variable 'x'
+        # Detect standalone variable 'x' and prevent scalar evaluation.
         if re.search(r'\bx\b', expr):
             messagebox.showwarning("Input Error", "Please use the 'Graph' button to plot expressions containing 'x'.")
             return
-        # evaluate with a restricted math environment
+        # Evaluate with a restricted math environment.
         result = eval(expr, SAFE_GLOBALS, SAFE_MATH_ENV)
         entry.delete(0, tk.END)
         entry.insert(0, str(result))
@@ -81,13 +99,13 @@ def calculate():
         messagebox.showerror("Evaluation Error", f"Could not evaluate expression.\nDetails: {e}")
 
 def scientific(func):
+    """Handle calculator scientific mode buttons like sin, cos, tan, log, and sqrt."""
     try:
         expr = normalize_expression(entry.get())
         resolved_value = eval(expr, SAFE_GLOBALS, SAFE_MATH_ENV)
         value = float(resolved_value)
 
         entry.delete(0, tk.END)
-        # A-version: use degrees consistently for trig functions
         if func == "sqrt":
             entry.insert(0, math.sqrt(value))
         elif func == "log":
@@ -118,13 +136,14 @@ def scientific(func):
         messagebox.showerror("Evaluation Error", f"Could not perform operation.\nDetails: {e}")
 
 def plot_and_find_roots():
+    """Plot an algebraic expression containing 'x' and highlight real roots."""
     raw_expr = entry.get()
     normalized_raw = normalize_expression(raw_expr)
     if not re.search(r'\bx\b', normalized_raw):
         messagebox.showwarning("Input Error", "Please include the variable 'x' in your algebraic expression to plot.")
         return
 
-    # Normalize UI inverse-trig input to Python/NumPy function names
+    # Normalize UI inverse-trig input to NumPy function names for plotting.
     expr = normalized_raw
     expr = expr.replace('sin⁻¹', 'asin').replace('cos⁻¹', 'acos').replace('tan⁻¹', 'atan')
 
