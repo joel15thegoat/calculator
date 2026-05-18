@@ -1,4 +1,4 @@
-# Scientific Calculator & Grapher
+# Scientific Calculator with graph func
 
 A Tkinter-based scientific calculator with plotting support.
 
