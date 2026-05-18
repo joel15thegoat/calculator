@@ -1,11 +1,4 @@
-"""Scientific Calculator & Grapher.
-
-This Tkinter application provides a scientific calculator UI, safe
-expression evaluation for scalar calculations, and algebraic function
-plotting with optional new or shared Matplotlib windows.
-
-The calculator uses degree-based trigonometry throughout for consistency.
-"""
+"""Scientific Calculator & Grapher."""
 
 import tkinter as tk
 from tkinter import simpledialog, messagebox
@@ -211,8 +204,6 @@ def plot_and_find_roots():
 
     except Exception as e:
         messagebox.showerror("Math/Syntax Error", f"Could not evaluate expression.\nCheck for missing signs (e.g. use '2*x' instead of '2x').\n\nDetails: {e}")
-
-# Buttons
 buttons = [
     '7', '8', '9', '/', 'sqrt',
     '4', '5', '6', '*', 'log',
@@ -222,7 +213,6 @@ buttons = [
     '^', 'π', 'e', 'abs', '%',
     'x', 'sin⁻¹', 'cos⁻¹', 'tan⁻¹', 'Graph'
 ]
-
 row_val = 1
 col_val = 0
 
