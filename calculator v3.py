@@ -203,7 +203,7 @@ def plot_and_find_roots():
         plt.show()
 
     except Exception as e:
-        messagebox.showerror("Math/Syntax Error", f"Could not evaluate expression.\nCheck for missing signs (e.g. use '2*x' instead of '2x').\n\nDetails: {e}")
+        messagebox.showerror("Math/Syntax Error", f"Could not evaluate expression.\nCheck for missing signs.\n\nDetails: {e}")
 buttons = [
     '7', '8', '9', '/', 'sqrt',
     '4', '5', '6', '*', 'log',
