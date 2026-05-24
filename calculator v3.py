@@ -77,7 +77,16 @@ def normalize_expression(expr):
 def calculate():
     """Evaluate the current expression from the calculator display."""
     try:
-        expr = normalize_expression(entry.get())
+        expr = normalize_expression(entry.get()).strip()
+        if not expr:
+            messagebox.showwarning("Input Error", "Enter an expression before pressing '='.")
+            return
+        if re.search(r'[+\-*/^%]$', expr) or expr.endswith('('):
+            messagebox.showwarning("Input Error", "Complete the expression before pressing '='.")
+            return
+        if expr.count('(') != expr.count(')'):
+            messagebox.showwarning("Input Error", "Parentheses are not balanced.")
+            return
         # Detect standalone variable 'x' and prevent scalar evaluation.
         if re.search(r'\bx\b', expr):
             messagebox.showwarning("Input Error", "Please use the 'Graph' button to plot expressions containing 'x'.")
@@ -94,7 +103,22 @@ def calculate():
 def scientific(func):
     """Handle calculator scientific mode buttons like sin, cos, tan, log, and sqrt."""
     try:
-        expr = normalize_expression(entry.get())
+        expr = normalize_expression(entry.get()).strip()
+        if not expr:
+            messagebox.showwarning("Input Error", "Enter a value before using a scientific function.")
+            return
+        if re.search(r'\bx\b', expr):
+            messagebox.showwarning("Input Error", "Use the 'Graph' button for expressions containing 'x'.")
+            return
+        if re.search(r'[+\-*/^%]$', expr) or expr.endswith('('):
+            messagebox.showwarning("Input Error", "Complete the expression before applying the scientific function.")
+            return
+        if expr.count('(') != expr.count(')'):
+            messagebox.showwarning("Input Error", "Parentheses are not balanced.")
+            return
+        if re.fullmatch(r'(sin|cos|tan|log|ln|sqrt|abs|asin|acos|atan|pi|e)', expr):
+            messagebox.showwarning("Input Error", "Enter a numeric value or expression before using this function.")
+            return
         resolved_value = eval(expr, SAFE_GLOBALS, SAFE_MATH_ENV)
         value = float(resolved_value)
 
