@@ -63,16 +63,117 @@ def normalize_expression(expr):
     expr = expr.replace('^', '**')
     # Insert '*' between a number and a following value or function.
     expr = re.sub(
-        r'(\d)(?=\s*(?:x\b|pi\b|e\b|sin\b|cos\b|tan\b|asin\b|acos\b|atan\b|log\b|ln\b|sqrt\b|abs\b|\())',
+        r'(\d)(?=\s*(?:x\b|pi\b|e\b(?![+\-]?\d)|sin\b|cos\b|tan\b|asin\b|acos\b|atan\b|log\b|ln\b|sqrt\b|abs\b|\())',
         r'\1*',
         expr,
     )
     expr = re.sub(
-        r'((?:x|pi|e)\b|\))\s*(?=(?:x\b|pi\b|e\b|sin\b|cos\b|tan\b|asin\b|acos\b|atan\b|log\b|ln\b|sqrt\b|abs\b|\())',
+        r'((?:x|pi|e)\b|(?<![\d.])e(?=\d)|\))\s*(?=(?:\d|x\b|pi\b|(?:e\b(?![+\-]?\d))|sin\b|cos\b|tan\b|asin\b|acos\b|atan\b|log\b|ln\b|sqrt\b|abs\b|\())',
         r'\1*',
         expr,
     )
     return expr
+
+def format_result(value):
+    """Format numeric calculator results to reduce floating-point noise."""
+    if isinstance(value, float):
+        if math.isfinite(value):
+            rounded = round(value, 12)
+            formatted = format(rounded, '.12g')
+            if '.' in formatted:
+                formatted = formatted.rstrip('0').rstrip('.')
+            return formatted
+        return str(value)
+    return str(value)
+
+def has_invalid_scientific_notation(expr):
+    """Return True when the expression contains malformed scientific notation."""
+    # Catch incomplete exponent notation like e+ or e- with no digits.
+    if re.search(r'e[+\-](?!\d)', expr, re.IGNORECASE):
+        return True
+    # Catch invalid exponent formats such as 1ee3, 1e3e4, or 1e3.4.
+    if re.search(r'\d+(?:\.\d*)?e[+\-]?(?!\d)', expr, re.IGNORECASE):
+        return True
+    if re.search(r'\d+(?:\.\d*)?e[+\-]?\d+(?=[A-Za-z_\.])', expr, re.IGNORECASE):
+        return True
+    return False
+
+
+def append_power(power):
+    """Append a power operator to the calculator input."""
+    click(f'^{power}')
+
+def insert_sqrt_3():
+    """Insert the square root of 3 into the calculator input."""
+    click('sqrt(3)')
+
+def insert_sqrt_value():
+    """Prompt the user for a root degree and value, then insert the root expression."""
+    degree = simpledialog.askinteger(
+        "Root Degree",
+        "Enter the root degree (e.g. 2 for square root, 5 for fifth root):",
+        parent=root,
+        minvalue=2,
+    )
+    if degree is None:
+        return
+    value = simpledialog.askstring("Root Value", "Enter a value to take the root of:", parent=root)
+    if value is None or value.strip() == "":
+        return
+    entry.insert(tk.END, f'pow({value.strip()}, 1/{degree})')
+
+def simplify_square_root(n):
+    """Return a simplified surd string for integer n or None if not possible."""
+    if n < 0 or int(n) != n:
+        return None
+    n = int(n)
+    outside = 1
+    inside = n
+    p = 2
+    while p * p <= inside:
+        while inside % (p * p) == 0:
+            inside //= p * p
+            outside *= p
+        p += 1
+    if inside == 1:
+        return str(outside)
+    if outside == 1:
+        return f'sqrt({inside})'
+    return f'{outside}*sqrt({inside})'
+
+def surd_form():
+    """Convert the current expression to a surd form string if possible."""
+    expr = normalize_expression(entry.get()).strip()
+    if not expr:
+        messagebox.showwarning("Surd Not Possible", "Enter an expression before attempting surd conversion.")
+        return
+    if re.search(r'\bx\b', expr):
+        messagebox.showwarning("Surd Not Possible", "Cannot convert expressions with 'x' into surd form.")
+        return
+    if expr.count('(') != expr.count(')'):
+        messagebox.showwarning("Surd Not Possible", "Parentheses are not balanced.")
+        return
+    try:
+        if has_invalid_scientific_notation(expr):
+            messagebox.showwarning("Surd Not Possible", "Malformed scientific notation detected. Check any 'e' exponent usage.")
+            return
+        result = eval(expr, SAFE_GLOBALS, SAFE_MATH_ENV)
+    except Exception:
+        messagebox.showwarning("Surd Not Possible", "Could not evaluate the current expression.")
+        return
+    if isinstance(result, float) and not math.isfinite(result):
+        messagebox.showwarning("Surd Not Possible", "Cannot convert this value into surd form.")
+        return
+    if isinstance(result, (int, float)):
+        square_candidate = result * result
+        nearest = round(square_candidate)
+        if math.isclose(square_candidate, nearest, rel_tol=1e-12, abs_tol=1e-12) and nearest >= 0:
+            surd = simplify_square_root(nearest)
+            if surd is not None:
+                entry.delete(0, tk.END)
+                entry.insert(0, surd)
+                return
+    messagebox.showwarning("Surd Not Possible", "Cannot represent the current expression in surd form.")
 
 def calculate():
     """Evaluate the current expression from the calculator display."""
@@ -87,6 +188,9 @@ def calculate():
         if expr.count('(') != expr.count(')'):
             messagebox.showwarning("Input Error", "Parentheses are not balanced.")
             return
+        if has_invalid_scientific_notation(expr):
+            messagebox.showwarning("Input Error", "Malformed scientific notation detected. Check any 'e' exponent usage.")
+            return
         # Detect standalone variable 'x' and prevent scalar evaluation.
         if re.search(r'\bx\b', expr):
             messagebox.showwarning("Input Error", "Please use the 'Graph' button to plot expressions containing 'x'.")
@@ -94,7 +198,7 @@ def calculate():
         # Evaluate with a restricted math environment.
         result = eval(expr, SAFE_GLOBALS, SAFE_MATH_ENV)
         entry.delete(0, tk.END)
-        entry.insert(0, str(result))
+        entry.insert(0, format_result(result))
     except Exception as e:
         entry.delete(0, tk.END)
         entry.insert(0, "Error")
@@ -116,6 +220,9 @@ def scientific(func):
         if expr.count('(') != expr.count(')'):
             messagebox.showwarning("Input Error", "Parentheses are not balanced.")
             return
+        if has_invalid_scientific_notation(expr):
+            messagebox.showwarning("Input Error", "Malformed scientific notation detected. Check any 'e' exponent usage.")
+            return
         if re.fullmatch(r'(sin|cos|tan|log|ln|sqrt|abs|asin|acos|atan|pi|e)', expr):
             messagebox.showwarning("Input Error", "Enter a numeric value or expression before using this function.")
             return
@@ -124,29 +231,45 @@ def scientific(func):
 
         entry.delete(0, tk.END)
         if func == "sqrt":
-            entry.insert(0, math.sqrt(value))
+            entry.insert(0, format_result(math.sqrt(value)))
         elif func == "log":
+            if value <= 0:
+                messagebox.showwarning("Math Domain Error", "Logarithm input must be greater than zero.")
+                return
             base_input = simpledialog.askstring("Log Base", "Enter base (e.g., 2, 10, or 'e'). Leave blank for 10:", parent=root)
             if base_input is None:
                 entry.insert(0, str(value))
                 return
             base_input = base_input.strip().lower()
-            base = 10.0 if base_input == "" else (math.e if base_input == "e" else float(base_input))
-            entry.insert(0, math.log(value, base))
+            try:
+                base = 10.0 if base_input == "" else (math.e if base_input == "e" else float(base_input))
+            except ValueError:
+                messagebox.showwarning("Input Error", "Invalid log base entered.")
+                return
+            if base <= 0 or base == 1:
+                messagebox.showwarning("Math Domain Error", "Log base must be positive and not equal to 1.")
+                return
+            entry.insert(0, format_result(math.log(value, base)))
         elif func == "sin":
-            entry.insert(0, math.sin(math.radians(value)))
+            entry.insert(0, format_result(math.sin(math.radians(value))))
         elif func == "cos":
-            entry.insert(0, math.cos(math.radians(value)))
+            entry.insert(0, format_result(math.cos(math.radians(value))))
         elif func == "tan":
-            entry.insert(0, math.tan(math.radians(value)))
+            entry.insert(0, format_result(math.tan(math.radians(value))))
         elif func == "sin⁻¹":
-            entry.insert(0, math.degrees(math.asin(value)))
+            if value < -1 or value > 1:
+                messagebox.showwarning("Math Domain Error", "Input for arcsin must be between -1 and 1.")
+                return
+            entry.insert(0, format_result(math.degrees(math.asin(value))))
         elif func == "cos⁻¹":
-            entry.insert(0, math.degrees(math.acos(value)))
+            if value < -1 or value > 1:
+                messagebox.showwarning("Math Domain Error", "Input for arccos must be between -1 and 1.")
+                return
+            entry.insert(0, format_result(math.degrees(math.acos(value))))
         elif func == "tan⁻¹":
-            entry.insert(0, math.degrees(math.atan(value)))
+            entry.insert(0, format_result(math.degrees(math.atan(value))))
         elif func == "abs":
-            entry.insert(0, abs(value))
+            entry.insert(0, format_result(abs(value)))
     except Exception as e:
         entry.delete(0, tk.END)
         entry.insert(0, "Error")
@@ -198,44 +321,77 @@ def plot_and_find_roots():
             "Open the graph in a new window?\nChoose No to reuse the current plot window."
         )
         if new_window:
-            plt.figure()
+            fig = plt.figure()
         else:
-            plt.figure("Graph View")
-            plt.clf()
+            fig = plt.figure("Graph View")
+            fig.clf()
 
-        plt.plot(x_vals, y_vals, label=f"y = {raw_expr}", color='#1f77b4', lw=2)
-        plt.axhline(0, color='black', linewidth=1, linestyle='--')
-        plt.axvline(0, color='black', linewidth=1, linestyle='--')
+        ax = fig.add_subplot(111)
+        line, = ax.plot(x_vals, y_vals, label=f"y = {raw_expr}", color='#1f77b4', lw=2, picker=8)
+        ax.axhline(0, color='black', linewidth=1, linestyle='--')
+        ax.axvline(0, color='black', linewidth=1, linestyle='--')
 
         for r in roots:
-            plt.plot(r, 0, 'ro')
-            plt.text(r, 0.4, f"({r}, 0)", color='red', weight='bold', fontsize=9, ha='center')
+            ax.plot(r, 0, 'ro')
+            ax.text(r, 0.4, f"({r}, 0)", color='red', weight='bold', fontsize=9, ha='center')
 
-        plt.title(f"Graph of y = {raw_expr}")
-        plt.xlabel("X Axis")
-        plt.ylabel("Y Axis")
-        plt.grid(True, which='both', linestyle=':', alpha=0.6)
-        plt.legend()
-        plt.xlim(-10, 10)
+        ax.set_title(f"Graph of y = {raw_expr}")
+        ax.set_xlabel("X Axis")
+        ax.set_ylabel("Y Axis")
+        ax.grid(True, which='both', linestyle=':', alpha=0.6)
+        ax.legend()
+        ax.set_xlim(-10, 10)
 
         valid_y = y_vals[valid]
         if len(valid_y) > 0:
             p05, p95 = np.percentile(valid_y, [5, 95])
             mar = (p95 - p05) * 0.1 if p95 != p05 else 1.0
-            plt.ylim(max(p05 - mar, -20), min(p95 + mar, 20))
+            ax.set_ylim(max(p05 - mar, -20), min(p95 + mar, 20))
 
+        annot = ax.annotate(
+            "",
+            xy=(0, 0),
+            xytext=(15, 15),
+            textcoords="offset points",
+            bbox=dict(boxstyle="round", fc="w", alpha=0.9),
+            arrowprops=dict(arrowstyle="->"),
+        )
+        annot.set_visible(False)
+
+        def on_motion(event):
+            if event.inaxes != ax:
+                return
+            contains, info = line.contains(event)
+            if contains:
+                x_data, y_data = line.get_data()
+                ind = info["ind"][0]
+                x_pt, y_pt = x_data[ind], y_data[ind]
+                annot.xy = (x_pt, y_pt)
+                annot.set_text(f"x={x_pt:.2f}\ny={y_pt:.2f}")
+                annot.set_visible(True)
+                line.set_linewidth(4)
+                line.set_color('#d62728')
+                fig.canvas.draw_idle()
+            else:
+                if annot.get_visible():
+                    annot.set_visible(False)
+                line.set_linewidth(2)
+                line.set_color('#1f77b4')
+                fig.canvas.draw_idle()
+
+        fig.canvas.mpl_connect("motion_notify_event", on_motion)
         plt.show()
 
     except Exception as e:
         messagebox.showerror("Math/Syntax Error", f"Could not evaluate expression.\nCheck for missing signs.\n\nDetails: {e}")
 buttons = [
-    '7', '8', '9', '/', 'sqrt',
-    '4', '5', '6', '*', 'log',
-    '1', '2', '3', '-', 'sin',
-    '0', '.', '=', '+', 'cos',
-    'C', '⌫', '(', ')', 'tan',
-    '^', 'π', 'e', 'abs', '%',
-    'x', 'sin⁻¹', 'cos⁻¹', 'tan⁻¹', 'Graph'
+    'C', '⌫', '(', ')', 'Graph', 'sqrt',
+    '7', '8', '9', '/', 'log', '^2',
+    '4', '5', '6', '*', '^3', 'root',
+    '1', '2', '3', '-', 'tan', '√3',
+    '0', '.', '=', '+', 'sin', 'cos',
+    'π', 'e', 'abs', 'surd', 'x', 'sin⁻¹',
+    'cos⁻¹', 'tan⁻¹'
 ]
 row_val = 1
 col_val = 0
@@ -249,6 +405,16 @@ for button in buttons:
         act= backspace
     elif button in ["sqrt", "log", "sin", "cos", "tan", "sin⁻¹", "cos⁻¹", "tan⁻¹", "abs"]:
         act= lambda x=button: scientific(x)
+    elif button == "^2":
+        act= lambda: append_power(2)
+    elif button == "^3":
+        act= lambda: append_power(3)
+    elif button == "√3":
+        act= insert_sqrt_3
+    elif button == "root":
+        act= insert_sqrt_value
+    elif button == "surd":
+        act= surd_form
     elif button == "Graph":
         act= plot_and_find_roots
     elif button== "π":
@@ -258,11 +424,11 @@ for button in buttons:
     else:
         act= lambda x=button: click(x)
 
-    b = tk.Button(root, text=button, width=5, height=2, font=("Arial", 16), command=act)
+    b = tk.Button(root, text=button, width=4, height=2, font=("Arial", 16), command=act)
     b.grid(row=row_val, column=col_val)
     
     col_val += 1
-    if col_val > 4:
+    if col_val > 5:
         col_val = 0
         row_val += 1
 
